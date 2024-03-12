@@ -27,26 +27,26 @@ int main() {
 	const char* externalIP = "73.119.107.1"; 
 	const char* internalIP = "10.0.0.151";
 
-	printf("Getting server info...\n");
+	printf("Checking if server is up...\n");
 	// You can't loopback external IPs without a hairpin NAT (i.e. NAT loopback)
 	iResult = getaddrinfo(internalIP, "3490", &hints, &results);
 	if (iResult != 0) {
-		printf("Can't get server info: %d\n\n", iResult);
+		printf("Server is not up: %d\nExiting...\n", iResult);
 		WSACleanup();
 		return 1;
 	}
 
-	printf("Server exists! Getting client socket...\n");
+	printf("Server is up! Opening a communication tunnel...\n");
 	SOCKET clientSocket = INVALID_SOCKET;
 	clientSocket = socket(results->ai_family, results->ai_socktype, results->ai_protocol);
 	if (clientSocket == INVALID_SOCKET) {
-		printf("Can't get socket: %d\n\n", iResult);
+		printf("Can't get socket: %d\nExiting...\n", clientSocket);
 		freeaddrinfo(results);
 		WSACleanup();
 		return 1;
 	}
 
-	printf("Ready for comms! Connecting to server...\n");
+	printf("Tunnel opened! Directing it to server...\n");
 	iResult = connect(clientSocket, results->ai_addr, (int)results->ai_addrlen);
 	if (iResult == SOCKET_ERROR) {
 		closesocket(clientSocket);
@@ -54,12 +54,12 @@ int main() {
 	}
 	freeaddrinfo(results);
 	if (clientSocket == INVALID_SOCKET) {
-		printf("Can't connect to server!\n\n");
+		printf("Can't connect to server: %d\nExiting...\n", iResult);
 		WSACleanup();
 		return 1;
 	}
 
-	printf("Connected to server!");
+	printf("Connected to server!\n");
 	char sendBuffer[256];
 	char recvBuffer[256];
 	do {
@@ -71,25 +71,33 @@ int main() {
 		}
 		iResult = send(clientSocket, sendBuffer, (int)strlen(sendBuffer), 0);
 		if (iResult == SOCKET_ERROR) {
-			printf("Failed to send message. Closing connection: %d\n", WSAGetLastError());
+			printf("Can't send message: %d\nExiting...\n", WSAGetLastError());
 			closesocket(clientSocket);
 			WSACleanup();
 			return 1;
 		}
 		memset(&sendBuffer, 0, sizeof(sendBuffer));
-		printf("Sent message! Waiting for response from server...\n");
+		printf("Message sent! Waiting for server response...\n");
 		iResult = recv(clientSocket, recvBuffer, sizeof(recvBuffer), 0);
 		if (iResult > 0) {
 			printf("Server says: %s\n", recvBuffer);
+			memset(&recvBuffer, 0, sizeof(recvBuffer));
 		}
 		else if (iResult == 0) {
-			printf("Server shutdown. Bye bye\n");
+			printf("Server down. Exiting...\n");
+			closesocket(clientSocket);
+			WSACleanup();
+			return 1;
 		}
 		else {
-			printf("Failed to receive message. Closing connection: %d\n", WSAGetLastError());
+			printf("Can't receive message: %d\nExiting...\n", WSAGetLastError());
+			closesocket(clientSocket);
+			WSACleanup();
+			return 1;
 		}
 	} while (strcmp(sendBuffer, "exit") != 0);
 
+	printf("Exiting...\n");
 	closesocket(clientSocket);
 	WSACleanup();
 	return 0;
